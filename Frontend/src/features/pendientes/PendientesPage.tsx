@@ -81,6 +81,28 @@ export function PendientesPage() {
         {pendientesQuery.isError ? <ErrorState title="No se pudieron cargar las obras" description="Verifica la conexion con la API." /> : null}
         {!obras.length && !pendientesQuery.isLoading ? <EmptyState title="Sin obras disponibles" description="No hay pendientes asociados para mostrar en tarjetas." /> : null}
 
+        <div className="works-grid-intro">
+          <div>
+            <span className="section-kicker">Vista por obra</span>
+            <h2 className="section-title">Selecciona un frente de trabajo</h2>
+            <p className="section-copy">Cada card resume el volumen total de pendientes y resueltos para entrar directo al tablero operativo de la obra.</p>
+          </div>
+          <div className="works-grid-summary">
+            <div className="works-summary-pill">
+              <span>Obras visibles</span>
+              <strong>{obras.length}</strong>
+            </div>
+            <div className="works-summary-pill works-summary-pill-open">
+              <span>Pendientes</span>
+              <strong>{obras.reduce((acc, obra) => acc + obra.pendientes, 0)}</strong>
+            </div>
+            <div className="works-summary-pill works-summary-pill-closed">
+              <span>Resueltos</span>
+              <strong>{obras.reduce((acc, obra) => acc + obra.resueltos, 0)}</strong>
+            </div>
+          </div>
+        </div>
+
         <div className="works-grid">
           {obras.map((obra, index) => (
             <article key={obra.obraId} className="work-card">
@@ -98,6 +120,8 @@ export function PendientesPage() {
                   <span className="work-card-total">{obra.total} registros</span>
                 </div>
 
+                <p className="work-card-note">Monitorea bloqueos abiertos, cierres recientes y entra al tablero para gestionar acciones por columna.</p>
+
                 <div className="work-card-stats">
                   <div className="work-stat work-stat-open">
                     <span className="work-stat-label">Pendientes</span>
@@ -110,7 +134,7 @@ export function PendientesPage() {
                 </div>
 
                 <Link to={`/pendientes/obra/${obra.obraId}`} className="work-card-link">
-                  Ver tablero
+                  Ver tablero operativo
                   <ArrowRight size={18} />
                 </Link>
               </div>

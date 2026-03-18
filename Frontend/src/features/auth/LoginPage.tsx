@@ -71,8 +71,8 @@ export function LoginPage() {
 
       <div className="auth-panel">
         <span className="brand-chip">Login</span>
-        <h2 style={{ marginTop: 18 }}>Inicia sesion</h2>
-        <p className="page-subtitle">Ingresa tus credenciales para continuar.</p>
+        <h2 className="auth-panel-title" style={{ marginTop: 18 }}>Inicia sesion</h2>
+        <p className="page-subtitle auth-panel-copy">Ingresa tus credenciales para continuar y supervisar la operacion tecnica en tiempo real.</p>
 
         {bootstrapRequired ? (
           <div className="info-box" style={{ marginTop: 18 }}>
@@ -92,6 +92,8 @@ export function LoginPage() {
             </Button>
           </div>
         </form>
+
+        <div className="auth-inline-note">Usa el mismo acceso para revisar dashboards, obras, reportes y pendientes desde una sola consola.</div>
 
         <div className="auth-info-mobile">
           <button

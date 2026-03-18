@@ -95,10 +95,14 @@ export function PendientesObraPage() {
             <span className="work-card-chip">Tablero por obra</span>
             <h2 className="work-card-title">{grouped.obraNombre}</h2>
             <p className="work-card-copy">{grouped.obraCliente}</p>
+            <div className="pending-hero-caption">Gestiona pendientes abiertos y recupera historial resuelto sin salir de esta obra.</div>
           </div>
         </div>
         <div className="pending-hero-meta">
-          <StatusBadge label={grouped.obraEstado} tone="neutral" />
+          <div className="pending-hero-topline">
+            <StatusBadge label={grouped.obraEstado} tone="neutral" />
+            <span className="pending-hero-hint">Sincronizado con el registro central</span>
+          </div>
           <div className="work-card-stats">
             <div className="work-stat work-stat-open">
               <span className="work-stat-label">Pendientes</span>
@@ -119,7 +123,10 @@ export function PendientesObraPage() {
         <div className="pending-dual-board">
           <section className="pending-lane pending-lane-open">
             <div className="pending-lane-head">
-              <span>Pendientes</span>
+              <div>
+                <span>Pendientes</span>
+                <p>Acciones que siguen abiertas en la obra</p>
+              </div>
               <span>{grouped.pendientes.length}</span>
             </div>
             <div className="pending-lane-body">
@@ -129,7 +136,10 @@ export function PendientesObraPage() {
 
           <section className="pending-lane pending-lane-closed">
             <div className="pending-lane-head">
-              <span>Resueltos</span>
+              <div>
+                <span>Resueltos</span>
+                <p>Registro de tareas ya cerradas</p>
+              </div>
               <span>{grouped.resueltos.length}</span>
             </div>
             <div className="pending-lane-body">

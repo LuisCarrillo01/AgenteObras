@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "lint": "eslint src tests *.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio"
@@ -22,6 +25,11 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "prisma": "^6.6.0"
+    "@eslint/js": "^9.38.0",
+    "eslint": "^9.38.0",
+    "globals": "^16.4.0",
+    "prisma": "^6.6.0",
+    "supertest": "^7.1.4",
+    "vitest": "^3.2.4"
   }
 }

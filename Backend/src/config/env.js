@@ -1,17 +1,8 @@
 const dotenv = require('dotenv');
 const path = require('path');
+const { z } = require('zod');
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
-function requireEnv(name) {
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
-}
 
 function parseCorsOrigins(value) {
   return value
@@ -20,14 +11,26 @@ function parseCorsOrigins(value) {
     .filter(Boolean);
 }
 
+const envSchema = z.object({
+  APP_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL es requerida'),
+  JWT_SECRET: z.string().min(1, 'JWT_SECRET es requerido'),
+  JWT_EXPIRES_IN: z.string().min(1).default('1d'),
+  CORS_ORIGIN: z.string().optional().default(''),
+  API_BASE_URL: z.string().optional().default('')
+});
+
+const parsedEnv = envSchema.safeParse(process.env);
+
+if (!parsedEnv.success) {
+  const { fieldErrors } = parsedEnv.error.flatten();
+  throw new Error(`Variables de entorno invalidas: ${JSON.stringify(fieldErrors)}`);
+}
+
 const env = {
-  APP_ENV: process.env.APP_ENV || 'development',
-  PORT: Number(process.env.PORT || 3000),
-  DATABASE_URL: requireEnv('DATABASE_URL'),
-  JWT_SECRET: requireEnv('JWT_SECRET'),
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '1d',
-  CORS_ORIGIN: parseCorsOrigins(process.env.CORS_ORIGIN || ''),
-  API_BASE_URL: process.env.API_BASE_URL || ''
+  ...parsedEnv.data,
+  CORS_ORIGIN: parseCorsOrigins(parsedEnv.data.CORS_ORIGIN)
 };
 
 module.exports = { env };

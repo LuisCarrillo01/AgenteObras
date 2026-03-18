@@ -128,12 +128,15 @@ export function AppShell() {
             <div>
               <div className="topbar-eyebrow">Panel operativo</div>
               <strong className="topbar-title">Coordinacion de reportes, tecnicos y obras</strong>
+              <div className="topbar-caption">Supervisa avance diario, frentes activos y pendientes sin perder contexto.</div>
             </div>
           </div>
           <div className="topbar-meta">
-            {/* <span className="desktop-only">Contrato API: `API_FRONTEND.md`</span> */}
-            <span>Usuario: {usuario?.email}</span>
-            <span>Rol: {usuario?.rol}</span>
+            <span className="topbar-meta-label">Usuario</span>
+            <strong>{usuario?.email}</strong>
+            <span className="topbar-meta-divider" />
+            <span className="topbar-meta-label">Rol</span>
+            <strong>{usuario?.rol}</strong>
           </div>
           <div className="topbar-actions">
             <Button variant="secondary" onClick={() => setLogoutDialogOpen(true)}>

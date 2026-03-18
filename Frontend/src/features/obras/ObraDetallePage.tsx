@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
 import { Card, EmptyState, ErrorState, PageHeader, StatusBadge } from '../../shared/ui/ui';
 import { getObraResumen } from './api';
 import { getReportesByObra } from '../reportes/api';
@@ -16,7 +17,16 @@ export function ObraDetallePage() {
 
   return (
     <section className="page">
-      <PageHeader title="Detalle de obra" subtitle="Resumen operativo, reportes asociados y pendientes de la obra seleccionada." />
+      <PageHeader
+        title="Detalle de obra"
+        subtitle="Resumen operativo, reportes asociados y pendientes de la obra seleccionada."
+        actions={(
+          <Link to="/obras" className="work-card-link work-card-link-inline">
+            <ArrowLeft size={18} />
+            Regresar
+          </Link>
+        )}
+      />
 
       {resumenQuery.isError ? <ErrorState title="No se pudo cargar el resumen" description="Verifica que el id de obra exista." /> : null}
 

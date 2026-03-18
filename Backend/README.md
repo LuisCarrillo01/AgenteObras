@@ -33,6 +33,16 @@ npm run prisma:generate
 npm start
 ```
 
+## Calidad y pruebas
+
+```bash
+npm run lint
+npm run test
+```
+
+- `lint` usa ESLint para revisar `src/` y `tests/`.
+- `test` usa Vitest + Supertest para validar endpoints base sin levantar el servidor.
+
 ## Prisma
 
 El archivo `prisma/schema.prisma` ya esta alineado al esquema definido en `db.sql`.
@@ -61,4 +71,14 @@ npm run prisma:push
 - `DELETE /api/tecnicos/:id` hace borrado logico: actualiza `activo = false`.
 - `PUT /api/obras/:id/finalizar` cambia el estado a `finalizada` y asigna `fecha_fin`.
 - `PUT /api/pendientes/:id/resolver` cambia el estado a `resuelto` y asigna `resuelto_en`.
+- `PUT /api/pendientes/:id/reabrir` devuelve un pendiente resuelto al estado `pendiente` y limpia `resuelto_en`.
 - La documentacion Postman usa variables `{{BASE_URL}}` y `{{TOKEN}}`; no hay URLs hardcodeadas.
+
+## Docker
+
+El proyecto incluye `Dockerfile` multi-stage y `.dockerignore` para levantar la API en contenedor.
+
+```bash
+docker build -t backend-reportes-tecnicos .
+docker run --env-file .env -p 3000:3000 backend-reportes-tecnicos
+```

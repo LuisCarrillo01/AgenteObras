@@ -99,7 +99,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
         <h1 className="page-title">{title}</h1>
         <p className="page-subtitle">{subtitle}</p>
       </div>
-      {actions}
+      {actions ? <div className="page-header-actions">{actions}</div> : null}
     </div>
   );
 }
