@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @db.VarChar(100)
+  email     String   @unique @db.VarChar(150)
+  password  String   @db.Text
+  rol       String   @default("encargado") @db.VarChar(50)
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now()) @map("creado_en") @db.Timestamp(6)
+
+  @@map("usuarios")
+}
+
+model Tecnico {
+  id                 Int                @id @default(autoincrement())
+  nombre             String             @db.VarChar(100)
+  telefono           String             @unique @db.VarChar(20)
+  activo             Boolean            @default(true)
+  creadoEn           DateTime           @default(now()) @map("creado_en") @db.Timestamp(6)
+  reportes           Reporte[]
+  tecnicosTelegram   TecnicoTelegram[]
+
+  @@map("tecnicos")
+}
+
+model Obra {
+  id          Int         @id @default(autoincrement())
+  nombre      String      @db.VarChar(150)
+  direccion   String?     @db.Text
+  cliente     String?     @db.VarChar(150)
+  estado      String      @default("activa") @db.VarChar(50)
+  fechaInicio DateTime?   @map("fecha_inicio") @db.Date
+  fechaFin    DateTime?   @map("fecha_fin") @db.Date
+  creadoEn    DateTime    @default(now()) @map("creado_en") @db.Timestamp(6)
+  reportes    Reporte[]
+  pendientes  Pendiente[]
+
+  @@map("obras")
+}
+
+model Reporte {
+  id               Int          @id @default(autoincrement())
+  tecnicoId        Int          @map("tecnico_id")
+  obraId           Int          @map("obra_id")
+  mensajeOriginal  String       @map("mensaje_original") @db.Text
+  fecha            DateTime     @default(now()) @db.Timestamp(6)
+  tecnico          Tecnico      @relation(fields: [tecnicoId], references: [id], onDelete: Restrict)
+  obra             Obra         @relation(fields: [obraId], references: [id], onDelete: Restrict)
+  actividades      Actividad[]
+  fotos            Foto[]
+
+  @@map("reportes")
+}
+
+model Actividad {
+  id          Int      @id @default(autoincrement())
+  reporteId   Int      @map("reporte_id")
+  descripcion String   @db.Text
+  reporte     Reporte  @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+
+  @@map("actividades")
+}
+
+model Pendiente {
+  id          Int       @id @default(autoincrement())
+  obraId      Int       @map("obra_id")
+  descripcion String    @db.Text
+  estado      String    @default("pendiente") @db.VarChar(50)
+  creadoEn    DateTime  @default(now()) @map("creado_en") @db.Timestamp(6)
+  resueltoEn  DateTime? @map("resuelto_en") @db.Timestamp(6)
+  obra        Obra      @relation(fields: [obraId], references: [id], onDelete: Cascade)
+
+  @@map("pendientes")
+}
+
+model Foto {
+  id          Int      @id @default(autoincrement())
+  reporteId   Int      @map("reporte_id")
+  url         String   @db.Text
+  descripcion String?  @db.Text
+  reporte     Reporte  @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+
+  @@map("fotos")
+}
+
+model TecnicoTelegram {
+  id          Int       @id @default(autoincrement())
+  telegramId  BigInt    @unique @map("telegram_id")
+  tecnicoId   Int?      @map("tecnico_id")
+  telefono    String?   @db.Text
+  nombre      String?   @db.Text
+  username    String?   @db.Text
+  autorizado  Boolean   @default(false)
+  creadoEn    DateTime  @default(now()) @map("creado_en") @db.Timestamp(6)
+  tecnico     Tecnico?  @relation(fields: [tecnicoId], references: [id], onDelete: SetNull)
+
+  @@map("tecnicos_telegram")
+}

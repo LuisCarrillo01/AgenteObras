@@ -1,0 +1,6 @@
+# Ignorar archivos de entorno
+.env
+
+# Opcional: ignorar archivos de configuración locales
+*.local
+*.secret
