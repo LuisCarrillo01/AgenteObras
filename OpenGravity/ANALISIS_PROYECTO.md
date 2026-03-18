@@ -1,190 +1,439 @@
-# Analisis del proyecto OpenGravity
+# Análisis Técnico Completo: OpenGravity
 
-## Que hace este proyecto
+## Guía de Migración TypeScript → Python + LangChain + LangGraph
 
-OpenGravity es un agente de IA que funciona a traves de Telegram y esta orientado a tecnicos de obra. Su objetivo principal es recibir mensajes de texto o audio, interpretar lo que el tecnico reporta y, cuando corresponde, registrar reportes de trabajo en una base de datos externa.
+---
 
-En la practica, el sistema hace estas cosas:
+## 1. Visión General del Proyecto
 
-- recibe mensajes desde un bot de Telegram;
-- valida si el usuario esta permitido por whitelist;
-- verifica la identidad del tecnico usando su numero de telefono y PostgreSQL;
-- transcribe audios a texto con Groq Whisper;
-- envia el contexto y el historial a un modelo LLM;
-- permite que el modelo use herramientas para consultar datos o guardar reportes;
-- guarda el historial conversacional en Firebase Firestore.
+**OpenGravity** es un agente de IA conversacional que opera a través de Telegram. Su propósito es permitir a **técnicos de campo** reportar avances de obra, consultar pendientes y registrar actividades de forma natural (texto o audio).
 
-## Stack tecnologico
+### Stack Actual (TypeScript / Node.js)
 
-- `TypeScript` + `Node.js`
-- `grammy` para el bot de Telegram
-- `groq-sdk` para chat y transcripcion de audio
-- `firebase-admin` para memoria conversacional en Firestore
-- `pg` para integracion con PostgreSQL
-- `dotenv` para configuracion por variables de entorno
+| Capa | Tecnología | Archivo(s) |
+|:---|:---|:---|
+| Entrypoint | `ts-node` | `src/index.ts` |
+| Bot (Telegram) | `grammy` | `src/bot/telegram.ts` |
+| Middlewares | `grammy` | `src/bot/middlewares/whitelist.ts`, `identity.ts` |
+| Agent Loop | Manual (while) | `src/agent/loop.ts` |
+| LLM Provider | Groq SDK (Llama 3.3 70B) + OpenRouter fallback | `src/llm/client.ts` |
+| Transcripción Audio | Groq Whisper Large V3 | `src/llm/client.ts` |
+| Memoria/Chat History | Firebase Firestore | `src/db/firebase.ts`, `src/db/schema.ts` |
+| Datos de Negocio | PostgreSQL | `src/db/postgres.ts` |
+| Herramientas del Agente | Registry pattern | `src/tools/registry.ts`, `*.ts` |
+| Configuración | dotenv | `src/config/env.ts` |
 
-## Flujo general del sistema
+---
 
-El punto de entrada es `src/index.ts`.
+## 2. Análisis Archivo por Archivo
 
-Al iniciar, la aplicacion:
+### 2.1 `src/index.ts` — Punto de Entrada
 
-1. carga las variables de entorno;
-2. inicializa Firestore para guardar historial;
-3. inicializa PostgreSQL para identidad y reportes tecnicos;
-4. registra las herramientas disponibles para el agente;
-5. levanta el bot de Telegram en modo polling.
+```
+main() {
+  1. initializeDatabase()     → Conecta Firebase Firestore
+  2. initializePostgres()     → Conecta PostgreSQL
+  3. import tools (side-effect → auto-register)
+  4. startBot()               → Inicia polling de Telegram
+}
+```
 
-Luego, cuando llega un mensaje:
+**Python equivalente**: Un `main.py` que inicialice el pool de Postgres, configure las tools y arranque el bot.
 
-1. pasa por una whitelist de IDs de Telegram;
-2. si PostgreSQL esta activo, se verifica si el usuario esta vinculado a un tecnico autorizado;
-3. si no esta autorizado, se le pide compartir su numero de telefono;
-4. si envia texto, el texto va directo al agente;
-5. si envia audio, primero se transcribe y luego se envia al agente;
-6. el agente consulta historial, llama al LLM y, si hace falta, ejecuta herramientas;
-7. la respuesta final vuelve al usuario en Telegram.
+---
 
-## Modulos principales
+### 2.2 `src/config/env.ts` — Variables de Entorno
 
-### `src/index.ts`
+Variables requeridas:
 
-Coordina el arranque completo del sistema.
+| Variable | Uso |
+|:---|:---|
+| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram |
+| `TELEGRAM_ALLOWED_USER_IDS` | Lista de IDs permitidos (whitelist), separados por coma |
+| `GROQ_API_KEY` | API key de Groq (LLM principal) |
+| `OPENROUTER_API_KEY` | Fallback LLM (opcional) |
+| `OPENROUTER_MODEL` | Modelo de OpenRouter |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Service account JSON para Firebase |
+| `POSTGRES_URL` | Connection string de PostgreSQL |
 
-### `src/bot/telegram.ts`
+**Python equivalente**: `python-dotenv` + `pydantic-settings` o un simple `os.getenv()`.
 
-Contiene la logica del bot:
+---
 
-- crea la instancia del bot;
-- habilita descarga de archivos de Telegram;
-- procesa contacto compartido para vincular telefono;
-- atiende mensajes de texto;
-- atiende mensajes de voz y audio.
+### 2.3 `src/llm/client.ts` — Cliente LLM
 
-### `src/bot/middlewares/whitelist.ts`
+**Lógica principal:**
 
-Bloquea silenciosamente cualquier usuario cuyo `telegram_id` no este en `TELEGRAM_ALLOWED_USER_IDS`.
+1. **Provider primario**: Groq SDK con modelo `llama-3.3-70b-versatile`.
+2. **Fallback**: Si Groq falla y existe `OPENROUTER_API_KEY`, reintenta con OpenRouter vía HTTP.
+3. **Tool Calling**: Envuelve las definiciones de tools en formato `{ type: 'function', function: toolDef }` y usa `tool_choice: 'auto'`.
+4. **Transcripción de Audio**: Usa `groq.audio.transcriptions.create()` con el modelo `whisper-large-v3`.
 
-### `src/bot/middlewares/identity.ts`
+**Python equivalente:**
 
-Controla el acceso funcional al agente:
+```python
+from langchain_groq import ChatGroq
 
-- si no hay PostgreSQL, deja pasar todo (modo local o desarrollo);
-- si el usuario ya esta autorizado, deja pasar;
-- si no lo esta, crea o actualiza su registro y le pide compartir telefono.
+# LLM principal
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=os.getenv("GROQ_API_KEY"),
+    temperature=0
+)
 
-### `src/agent/loop.ts`
+# Bind de herramientas
+llm_with_tools = llm.bind_tools(tools)
 
-Es el corazon del agente. Hace un bucle de hasta 5 iteraciones donde:
+# Transcripción de audio (con Groq SDK directo)
+from groq import Groq
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-- guarda el mensaje del usuario;
-- recupera historial reciente desde Firestore;
-- construye el prompt del sistema con el `telegram_id` del tecnico;
-- llama al modelo;
-- detecta si el modelo quiere usar herramientas;
-- ejecuta herramientas y reinyecta resultados al modelo;
-- devuelve la respuesta final al usuario.
+def transcribe_audio(file_path: str) -> str:
+    with open(file_path, "rb") as f:
+        result = groq_client.audio.transcriptions.create(
+            file=f, model="whisper-large-v3", response_format="text"
+        )
+    return result
+```
 
-El prompt esta preparado para que el agente trabaje en espanol y use directamente el `telegram_id` actual al registrar reportes.
+---
 
-### `src/llm/client.ts`
+### 2.4 `src/db/firebase.ts` + `src/db/schema.ts` — Memoria Conversacional
 
-Encapsula la conexion con el modelo:
+**Qué hace:**
+- Inicializa Firebase Admin SDK con service account.
+- Guarda cada mensaje (user, assistant, tool) en Firestore bajo `/users/{userId}/messages/`.
+- Recupera los últimos N mensajes ordenados por timestamp.
 
-- proveedor principal: Groq con `llama-3.3-70b-versatile`;
-- fallback opcional: OpenRouter si Groq falla y existe API key;
-- transcripcion de audio: `whisper-large-v3`.
+**En Python con LangGraph esto se REEMPLAZA completamente:**
 
-### `src/db/firebase.ts` y `src/db/schema.ts`
+LangGraph tiene el concepto de **Checkpointer** que persiste automáticamente el estado completo del grafo (incluyendo todos los mensajes) por `thread_id`.
 
-Se usan como memoria conversacional:
+```python
+from langgraph.checkpoint.postgres import PostgresSaver
 
-- cada usuario tiene una coleccion de mensajes;
-- se guardan mensajes de usuario, asistente y herramientas;
-- el historial se lee en orden cronologico para alimentar al LLM.
+# Usa la misma Postgres para todo
+checkpointer = PostgresSaver.from_conn_string(os.getenv("POSTGRES_URL"))
 
-### `src/db/postgres.ts`
+# Al compilar el grafo:
+graph = builder.compile(checkpointer=checkpointer)
 
-Maneja la integracion con PostgreSQL. Tiene dos roles principales:
+# Al invocar: thread_id = telegram_id del usuario
+config = {"configurable": {"thread_id": str(telegram_id)}}
+result = graph.invoke({"messages": [HumanMessage(content=user_text)]}, config)
+```
 
-- identidad de usuarios de Telegram contra tecnicos reales;
-- soporte de operaciones para reportes tecnicos y consultas del sistema.
+> **IMPORTANTE**: Con esto ya NO necesitas Firebase Firestore. La memoria queda en Postgres.
 
-Funciones importantes:
+---
 
-- `initializePostgres`: abre la conexion;
-- `findTelegramUser`: busca usuario por `telegram_id`;
-- `upsertTelegramUser`: crea o actualiza el usuario Telegram;
-- `linkPhoneToTelegramUser`: vincula telefono y tecnico autorizado.
+### 2.5 `src/db/postgres.ts` — Base de Datos de Negocio
 
-## Herramientas del agente
+**Funciones exportadas:**
 
-Las herramientas se registran en `src/tools/registry.ts` y el modelo puede invocarlas automaticamente.
+| Función | Propósito |
+|:---|:---|
+| `initializePostgres()` | Crea pool de conexión con SSL condicional |
+| `getPgPool()` | Devuelve el pool singleton |
+| `findTelegramUser(telegramId)` | Busca en tabla `tecnicos_telegram` |
+| `upsertTelegramUser(telegramId, nombre, username)` | UPSERT del usuario con ON CONFLICT |
+| `linkPhoneToTelegramUser(telegramId, phone)` | Vincula teléfono → busca técnico → autoriza |
 
-### `get_current_time`
+**Python equivalente**: `psycopg2` o `asyncpg`, o bien `SQLAlchemy` para ORM.
 
-Devuelve fecha y hora actual.
+```python
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-### `check_technician`
+pool = psycopg2.pool.ThreadedConnectionPool(1, 10, dsn=os.getenv("POSTGRES_URL"))
 
-Verifica si el usuario de Telegram esta registrado y autorizado como tecnico.
+def find_telegram_user(telegram_id: int):
+    with pool.getconn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM tecnicos_telegram WHERE telegram_id = %s", (telegram_id,))
+            return cur.fetchone()
+```
 
-### `check_construction_status`
+---
 
-Busca una obra por nombre y devuelve:
+### 2.6 `src/tools/registry.ts` — Registro de Herramientas
 
-- datos basicos de la obra;
-- pendientes abiertos;
-- ultimos reportes asociados.
+**Patrón actual:** Un `Map<string, Tool>` global con funciones `registerTool()`, `getToolDefinitions()` y `executeTool()`.
 
-### `create_tech_report`
+**En Python/LangChain esto se simplifica** usando el decorador `@tool`:
 
-Es la pieza clave del negocio. Registra un reporte tecnico en PostgreSQL y ademas:
+```python
+from langchain_core.tools import tool
 
-- resuelve el tecnico a partir del `telegram_id`;
-- ubica la obra por nombre aproximado;
-- inserta el reporte original;
-- inserta actividades realizadas;
-- crea nuevos pendientes detectados;
-- usa transaccion SQL para mantener consistencia.
+@tool
+def get_current_time() -> dict:
+    """Devuelve la fecha y hora actual."""
+    from datetime import datetime
+    now = datetime.now()
+    return {"time": str(now.time()), "date": str(now.date()), "iso": now.isoformat()}
+```
 
-## Modelo de datos inferido
+No necesitas un registry manual. LangChain maneja la serialización de schemas automáticamente.
 
-Por el codigo y las consultas SQL, el proyecto parece apoyarse en estas tablas principales en PostgreSQL:
+---
 
-- `tecnicos`
-- `tecnicos_telegram`
-- `obras`
-- `reportes`
-- `actividades`
-- `pendientes`
+### 2.7 Herramientas del Agente (Tools)
 
-El archivo `DB_migration_fase5.sql` agrega la tabla `tecnicos_telegram`, que sirve como puente entre Telegram y los tecnicos del sistema.
+#### `get_current_time`
+- **Parámetros**: Ninguno.
+- **Retorna**: Hora, fecha, timezone, ISO.
+- **Migración**: Trivial (ver ejemplo arriba).
 
-## Variables de entorno importantes
+#### `check_technician`
+- **Parámetros**: `telegram_id: number`
+- **Lógica**: Query a `tecnicos_telegram` JOIN `tecnicos` para verificar autorización.
+- **Retorna**: `{isRegistered, autorizado, tecnico: {id, nombre, telefono}}`
 
-En `src/config/env.ts` se observan estas variables clave:
+```python
+@tool
+def check_technician(telegram_id: int) -> dict:
+    """Verifica si el usuario de Telegram está registrado como técnico autorizado."""
+    conn = pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT tt.telegram_id, tt.autorizado, tt.nombre, tt.telefono,
+                       t.id as tecnico_id, t.nombre as nombre_tecnico
+                FROM tecnicos_telegram tt
+                LEFT JOIN tecnicos t ON t.id = tt.tecnico_id
+                WHERE tt.telegram_id = %s
+            """, (telegram_id,))
+            row = cur.fetchone()
+            if not row:
+                return {"isRegistered": False, "message": "Usuario no encontrado."}
+            if not row["autorizado"]:
+                return {"isRegistered": True, "autorizado": False}
+            return {"isRegistered": True, "autorizado": True, "tecnico": dict(row)}
+    finally:
+        pool.putconn(conn)
+```
 
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_ALLOWED_USER_IDS`
-- `GROQ_API_KEY`
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL`
-- `DB_PATH`
-- `GOOGLE_APPLICATION_CREDENTIALS`
-- `POSTGRES_URL`
+#### `check_construction_status`
+- **Parámetros**: `keyword: string`
+- **Lógica**: Busca obra por ILIKE, luego pendientes abiertos y últimos 5 reportes.
 
-## En resumen
+#### `create_tech_report`
+- **Parámetros**: `telegram_id`, `obra_nombre`, `mensaje_original`, `actividades[]`, `nuevos_pendientes[]?`
+- **Lógica (TRANSACCIONAL)**:
+  1. Resolve `tecnico_id` desde `telegram_id`.
+  2. Busca `obra_id` por ILIKE nombre.
+  3. INSERT en `reportes`.
+  4. INSERT múltiples en `actividades`.
+  5. INSERT múltiples en `pendientes` (si existen).
+  6. COMMIT o ROLLBACK.
 
-OpenGravity es un asistente de campo para tecnicos de obra que usa Telegram como interfaz, IA para entender mensajes y dos almacenamientos distintos:
+> **CRÍTICO**: Esta herramienta usa transacciones. En Python, usar `with conn: ... conn.commit()` o `try/except + rollback`.
 
-- `Firestore` para memoria conversacional;
-- `PostgreSQL` para identidad, obras, reportes, actividades y pendientes.
+---
 
-El valor principal del proyecto esta en convertir mensajes naturales o audios de un tecnico en reportes estructurados dentro del sistema de obras.
+### 2.8 `src/bot/telegram.ts` — Bot de Telegram
 
-## Observaciones utiles
+**Pipeline de middlewares (orden importa):**
 
-- `DB.sql` esta vacio en el estado actual del proyecto, asi que el esquema principal no esta documentado ahi.
-- Hay archivos sensibles presentes como `.env` y `service-account.json`; conviene no versionarlos en un repositorio publico.
-- El `package.json` menciona SQLite en la descripcion, pero el codigo actual usa Firestore para historial y PostgreSQL para datos operativos.
+```
+Mensaje entrante
+    │
+    ▼
+[1] whitelistMiddleware → ¿ID en lista permitida? → Si no, DROP silencioso
+    │
+    ▼
+[2] contact handler → Si es contacto compartido, vincula teléfono
+    │
+    ▼
+[3] identityMiddleware → ¿Autorizado en DB? → Si no, pide compartir teléfono
+    │
+    ▼
+[4] message:text → runAgentLoop(userId, text)
+    │
+    ▼
+[5] message:voice/audio → transcribeAudio() → runAgentLoop(userId, transcribedText)
+```
+
+**Python equivalente (`python-telegram-bot` o `aiogram`):**
+
+```python
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, filters
+
+async def handle_text(update: Update, context):
+    telegram_id = update.effective_user.id
+    text = update.message.text
+    
+    # Invocar el grafo de LangGraph
+    config = {"configurable": {"thread_id": str(telegram_id)}}
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content=text)], "telegram_id": telegram_id},
+        config
+    )
+    
+    reply = result["messages"][-1].content
+    await update.message.reply_text(reply)
+```
+
+---
+
+### 2.9 `src/bot/middlewares/whitelist.ts`
+- Compara `ctx.from.id` contra `ENV.TELEGRAM_ALLOWED_USER_IDS[]`.
+- Si no está, ignora silenciosamente.
+
+### 2.10 `src/bot/middlewares/identity.ts`
+- Llama a `upsertTelegramUser()` para crear/actualizar el registro.
+- Si `autorizado == true` → pasa al agente.
+- Si `autorizado == false` → envía teclado con botón "📱 Compartir mi número" y **bloquea** el request.
+
+---
+
+### 2.11 `src/agent/loop.ts` — El Corazón del Agente
+
+**Flujo actual (bucle imperativo):**
+
+```
+runAgentLoop(userId, userInput):
+  1. saveMessage(userId, 'user', userInput)           → Firestore
+  2. history = getHistory(userId, 10)                  → Últimos 10 msgs
+  3. messages = [systemPrompt(userId), ...history]
+  4. for i in 0..MAX_ITERATIONS(5):
+       response = chatCompletion(messages, tools)
+       if response.tool_calls:
+           for each tool_call:
+               result = executeTool(name, args)
+               messages.push(toolResult)
+           continue  ← vuelve a llamar al LLM
+       else:
+           saveMessage(userId, 'assistant', response)
+           return response.content                     ← FIN
+  5. return "Error: max iterations"
+```
+
+**Equivalente en LangGraph (grafo con nodos y edges):**
+
+```python
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
+from langchain_core.messages import SystemMessage, HumanMessage
+
+# 1. Definir estado
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    telegram_id: int
+
+# 2. Nodo: llamar al modelo
+def call_model(state: AgentState):
+    system_msg = SystemMessage(content=build_system_prompt(state["telegram_id"]))
+    messages = [system_msg] + state["messages"]
+    response = llm_with_tools.invoke(messages)
+    return {"messages": [response]}
+
+# 3. Nodo: ejecutar herramientas
+tool_node = ToolNode(tools=[get_current_time, check_technician, check_construction_status, create_tech_report])
+
+# 4. Decidir si continuar o terminar
+def should_continue(state: AgentState):
+    last_message = state["messages"][-1]
+    if last_message.tool_calls:
+        return "tools"
+    return END
+
+# 5. Construir el grafo
+builder = StateGraph(AgentState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+builder.add_edge("tools", "agent")
+
+# 6. Compilar con checkpointer (memoria persistente)
+graph = builder.compile(checkpointer=checkpointer)
+```
+
+```mermaid
+graph TD
+    A[START] --> B[agent: call_model]
+    B -->|tool_calls?| C[tools: ToolNode]
+    B -->|no tool_calls| D[END]
+    C --> B
+```
+
+---
+
+## 3. Esquema de Base de Datos (PostgreSQL)
+
+```
+usuarios        → Usuarios del dashboard (admin/encargado)
+tecnicos        → Técnicos de campo (nombre, teléfono)
+tecnicos_telegram → Vinculación: telegram_id ↔ tecnico_id (autorización)
+obras           → Proyectos/obras (nombre, estado, cliente)
+reportes        → Cabecera: técnico + obra + mensaje original
+actividades     → Detalle: líneas de trabajo (FK → reportes)
+pendientes      → Tareas pendientes por obra (FK → obras)
+fotos           → Imágenes adjuntas (FK → reportes)
+```
+
+> **Nota**: La tabla `tecnicos_telegram` fue agregada en una migración posterior (`DB_migration_fase5.sql`).
+
+---
+
+## 4. Estructura Propuesta para el Proyecto Python
+
+```
+opengravity-python/
+├── .env
+├── requirements.txt
+├── main.py                    ← Entrypoint: init DB + init bot
+├── config/
+│   └── settings.py            ← Variables de entorno (pydantic-settings)
+├── agent/
+│   ├── graph.py               ← StateGraph de LangGraph
+│   └── prompts.py             ← System prompt dinámico
+├── tools/
+│   ├── time_tool.py
+│   ├── technician_tool.py
+│   ├── construction_tool.py
+│   └── report_tool.py
+├── db/
+│   ├── pool.py                ← Pool de conexión psycopg2/asyncpg
+│   └── identity.py            ← upsert/find/linkPhone helpers
+├── bot/
+│   ├── telegram_bot.py        ← Handlers de texto, audio, contacto
+│   └── middlewares.py         ← Whitelist + Identity check
+└── llm/
+    └── transcription.py       ← Whisper via Groq SDK
+```
+
+---
+
+## 5. `requirements.txt` Sugerido
+
+```txt
+langchain>=0.3
+langchain-groq>=0.2
+langgraph>=0.2
+psycopg2-binary>=2.9
+python-telegram-bot>=21
+python-dotenv>=1.0
+groq>=0.11
+```
+
+---
+
+## 6. Checklist de Migración
+
+- [ ] Configurar entorno Python (`venv`, `.env`)
+- [ ] Crear `config/settings.py` con todas las variables
+- [ ] Crear `db/pool.py` con conexión a PostgreSQL
+- [ ] Crear `db/identity.py` con `upsert_telegram_user`, `link_phone_to_telegram_user`
+- [ ] Implementar `tools/` (4 herramientas con `@tool`)
+- [ ] Implementar `agent/graph.py` con `StateGraph`
+- [ ] Implementar `agent/prompts.py` con el system prompt dinámico
+- [ ] Implementar `bot/telegram_bot.py` con handlers
+- [ ] Implementar `bot/middlewares.py` (whitelist + identity)
+- [ ] Implementar `llm/transcription.py` (Whisper)
+- [ ] Configurar `PostgresSaver` como checkpointer (reemplaza Firebase)
+- [ ] Probar flujo completo: texto → agente → tool call → respuesta
+- [ ] Probar flujo de audio: voz → transcripción → agente → respuesta
+- [ ] Probar registro: contacto → vincular teléfono → autorizar
