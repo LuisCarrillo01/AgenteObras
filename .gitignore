@@ -1,6 +1,11 @@
 # Ignorar archivos de entorno
 .env
 
+# Ignorar credenciales
+service-account.json
+*.csv
+
 # Opcional: ignorar archivos de configuración locales
 *.local
 *.secret
+
