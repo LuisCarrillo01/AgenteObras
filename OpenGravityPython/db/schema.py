@@ -76,3 +76,57 @@ async def get_history(user_id: int, limit: int = 20) -> list[dict]:
             msg["tool_call_id"] = row["tool_call_id"]
         result.append(msg)
     return result
+
+
+def _draft_ref(user_id: int):
+    """Retorna la referencia al documento del borrador actual del usuario."""
+    return db.collection("users").document(str(user_id)).collection("state").document("report_draft")
+
+
+def save_report_draft_sync(user_id: int, draft: dict) -> None:
+    """Guarda o reemplaza el borrador actual del reporte del usuario."""
+    _draft_ref(user_id).set({
+        **draft,
+        "updated_at": datetime.now(timezone.utc),
+    })
+
+
+async def save_report_draft(user_id: int, draft: dict) -> None:
+    """Guarda o reemplaza el borrador actual del reporte del usuario."""
+    save_report_draft_sync(user_id, draft)
+
+
+def get_report_draft_sync(user_id: int) -> dict | None:
+    """Obtiene el borrador actual del usuario si existe."""
+    snapshot = _draft_ref(user_id).get()
+    if not snapshot.exists:
+        return None
+    return snapshot.to_dict()
+
+
+async def get_report_draft(user_id: int) -> dict | None:
+    """Obtiene el borrador actual del usuario si existe."""
+    return get_report_draft_sync(user_id)
+
+
+def update_report_draft_sync(user_id: int, updates: dict) -> None:
+    """Actualiza parcialmente el borrador actual del usuario."""
+    _draft_ref(user_id).set({
+        **updates,
+        "updated_at": datetime.now(timezone.utc),
+    }, merge=True)
+
+
+async def update_report_draft(user_id: int, updates: dict) -> None:
+    """Actualiza parcialmente el borrador actual del usuario."""
+    update_report_draft_sync(user_id, updates)
+
+
+def clear_report_draft_sync(user_id: int) -> None:
+    """Elimina el borrador actual del usuario."""
+    _draft_ref(user_id).delete()
+
+
+async def clear_report_draft(user_id: int) -> None:
+    """Elimina el borrador actual del usuario."""
+    clear_report_draft_sync(user_id)

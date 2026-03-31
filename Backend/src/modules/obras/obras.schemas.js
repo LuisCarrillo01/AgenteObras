@@ -4,6 +4,7 @@ const obraEstados = ['activa', 'pausada', 'finalizada'];
 
 const createObraSchema = z.object({
   nombre: z.string().min(2),
+  foto_referencia_url: z.string().url().optional().nullable(),
   direccion: z.string().optional().nullable(),
   cliente: z.string().optional().nullable(),
   estado: z.enum(obraEstados).optional(),
@@ -12,6 +13,7 @@ const createObraSchema = z.object({
 
 const updateObraSchema = z.object({
   nombre: z.string().min(2).optional(),
+  foto_referencia_url: z.string().url().optional().nullable(),
   direccion: z.string().optional().nullable(),
   cliente: z.string().optional().nullable(),
   estado: z.enum(obraEstados).optional(),

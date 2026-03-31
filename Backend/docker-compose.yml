@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: backend_app
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - agente_obras
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: Obras
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - agente_obras
+
+volumes:
+  postgres_data:
+
+
+networks:
+  agente_obras:
+    name: Agente_obras
+    driver: bridge

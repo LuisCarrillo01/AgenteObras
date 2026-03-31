@@ -14,6 +14,8 @@ from tools.time_tool import (
 from tools.technician_tool import (
     CHECK_TECHNICIAN_DEF,
     check_technician_handler,
+    LIST_CONSTRUCTIONS_DEF,
+    list_constructions_handler,
     CHECK_CONSTRUCTION_DEF,
     check_construction_handler,
 )
@@ -26,6 +28,7 @@ from tools.report_tool import (
 _HANDLERS: dict = {
     "get_current_time": time_handler,
     "check_technician": check_technician_handler,
+    "list_constructions": list_constructions_handler,
     "check_construction_status": check_construction_handler,
     "create_tech_report": report_handler,
 }
@@ -34,6 +37,7 @@ _HANDLERS: dict = {
 TOOL_DEFINITIONS: list[dict] = [
     TIME_DEF,
     CHECK_TECHNICIAN_DEF,
+    LIST_CONSTRUCTIONS_DEF,
     CHECK_CONSTRUCTION_DEF,
     REPORT_DEF,
 ]

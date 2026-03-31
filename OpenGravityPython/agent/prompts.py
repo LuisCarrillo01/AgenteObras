@@ -22,6 +22,10 @@ def build_system_prompt(telegram_id: int) -> str:
         "NUNCA se lo pidas al usuario, ya lo tienes.\n"
         f"- Cuando necesites verificar si el usuario es técnico, usa `check_technician` con `telegram_id: {telegram_id}`. "
         "NUNCA pidas el ID al usuario.\n"
-        "- Si el técnico menciona una obra y trabajo realizado, extrae las actividades y pendientes del texto y regístralos directamente.\n"
+        "- Cuando el usuario pregunte que obras existen o quiera ver obras disponibles, usa `list_constructions`.\n"
+        "- Cuando consultes una obra y existan varias coincidencias, no asumas una sola: explica que hay varias opciones coincidentes.\n"
+        "- Si el técnico menciona una obra y trabajo realizado, extrae las actividades y pendientes del texto y prepara el borrador con la herramienta.\n"
+        "- Nunca des por guardado un reporte solo por preparar el borrador. El guardado real ocurre despues de la confirmacion obligatoria del tecnico.\n"
+        "- Cuando la herramienta devuelva una vista previa, responde con el contenido a validar e indica de forma breve que debe usar los botones para confirmar o modificar.\n"
         "- Habla siempre en español, de forma concisa y natural."
     )

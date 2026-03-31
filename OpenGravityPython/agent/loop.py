@@ -16,7 +16,15 @@ from agent.prompts import build_system_prompt
 MAX_ITERATIONS = 5
 
 
-async def run_agent_loop(user_id: int, user_input: str) -> str:
+def _build_agent_result(reply: str = "", tool_results: list[dict] | None = None) -> dict:
+    """Normaliza la salida del loop para que el bot pueda reaccionar a tools."""
+    return {
+        "reply": reply,
+        "tool_results": tool_results or [],
+    }
+
+
+async def run_agent_loop(user_id: int, user_input: str) -> dict:
     """
     Bucle principal del agente. Replica exactamente la versión de TypeScript:
     1. Guardar el mensaje del usuario en Firestore
@@ -39,9 +47,11 @@ async def run_agent_loop(user_id: int, user_input: str) -> str:
     ]
 
     current_iteration = 0
+    tool_results: list[dict] = []
 
     while current_iteration < MAX_ITERATIONS:
         current_iteration += 1
+        print(f"[Agent] === Iteration {current_iteration}/{MAX_ITERATIONS} ===")
 
         # Llamar al LLM con los mensajes y las definiciones de herramientas
         response_message = chat_completion(messages, TOOL_DEFINITIONS)
@@ -50,7 +60,13 @@ async def run_agent_loop(user_id: int, user_input: str) -> str:
         # Verificar si el LLM quiere ejecutar alguna herramienta
         tool_calls = response_message.get("tool_calls")
 
+        print(f"[Agent] LLM response has tool_calls: {bool(tool_calls)}")
+        if response_message.get("content"):
+            print(f"[Agent] LLM content: {response_message['content'][:200]}")
+
         if tool_calls and len(tool_calls) > 0:
+            print(f"[Agent] {len(tool_calls)} tool call(s) detected")
+
             # Guardar la intención de llamada a herramientas del asistente en Firestore
             await save_message(
                 user_id,
@@ -64,8 +80,14 @@ async def run_agent_loop(user_id: int, user_input: str) -> str:
                 function_args = json.loads(tool_call["function"].get("arguments", "{}"))
 
                 try:
-                    print(f"[Agent] Executing tool {function_name} with args: {function_args}")
+                    print(f"[Agent] Executing tool: {function_name}")
+                    print(f"[Agent] Tool args: {json.dumps(function_args, ensure_ascii=False, default=str)}")
                     result = execute_tool(function_name, function_args)
+                    print(f"[Agent] Tool result: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
+                    tool_results.append({
+                        "name": function_name,
+                        "result": result,
+                    })
 
                     # Crear el mensaje de resultado de la herramienta
                     tool_message = {
@@ -87,7 +109,9 @@ async def run_agent_loop(user_id: int, user_input: str) -> str:
                     )
 
                 except Exception as e:
-                    print(f"[Agent] Tool {function_name} failed: {e}")
+                    print(f"[Agent] Tool {function_name} FAILED: {e}")
+                    import traceback
+                    traceback.print_exc()
                     error_content = json.dumps({"error": str(e)})
 
                     # Crear mensaje de error para que el LLM sepa que la herramienta falló
@@ -111,7 +135,12 @@ async def run_agent_loop(user_id: int, user_input: str) -> str:
             continue
 
         # Si no hay llamadas a herramientas, es la respuesta final del agente
-        await save_message(user_id, "assistant", response_message.get("content"))
-        return response_message.get("content") or ""
+        print(f"[Agent] Final response (no tool calls)")
+        final_reply = response_message.get("content") or ""
+        await save_message(user_id, "assistant", final_reply)
+        return _build_agent_result(final_reply, tool_results)
 
-    return "Error: Agent reached maximum iterations without returning a final answer."
+    return _build_agent_result(
+        "Error: Agent reached maximum iterations without returning a final answer.",
+        tool_results,
+    )

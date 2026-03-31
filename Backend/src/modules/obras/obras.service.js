@@ -9,6 +9,7 @@ function normalizeDate(value) {
 function mapObraPayload(payload) {
   return {
     nombre: payload.nombre,
+    fotoReferenciaUrl: payload.foto_referencia_url ?? null,
     direccion: payload.direccion ?? null,
     cliente: payload.cliente ?? null,
     estado: payload.estado,

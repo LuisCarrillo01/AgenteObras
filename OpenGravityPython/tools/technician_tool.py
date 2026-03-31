@@ -1,17 +1,14 @@
 """
-Herramientas: check_technician y check_construction_status
-Equivalente a src/tools/get_technical_info.ts
+Herramientas para consultar tecnicos y obras.
 
-check_technician: Verifica si un usuario de Telegram es un técnico autorizado.
-check_construction_status: Consulta el estado de una obra (pendientes y reportes recientes).
+- check_technician: valida si el usuario de Telegram es un tecnico autorizado.
+- list_constructions: lista obras activas o coincidencias por palabra clave.
+- check_construction_status: consulta el estado de una obra, pero evita asumir una sola si hay ambiguedad.
 """
 
 from db.pool import get_pool
 from psycopg2.extras import RealDictCursor
 
-
-# ── check_technician ──────────────────────────────────────────────────────────
-# Definición JSON-schema para que el LLM sepa cómo usar esta herramienta
 
 CHECK_TECHNICIAN_DEF = {
     "name": "check_technician",
@@ -29,19 +26,88 @@ CHECK_TECHNICIAN_DEF = {
 }
 
 
-def check_technician_handler(args: dict) -> dict:
-    """
-    Verifica si un usuario de Telegram es técnico autorizado.
-    Busca en tecnicos_telegram y hace JOIN con tecnicos para obtener los datos.
-    """
+LIST_CONSTRUCTIONS_DEF = {
+    "name": "list_constructions",
+    "description": "Lista las obras activas del sistema. Si se envia una palabra clave, devuelve las obras activas cuyo nombre coincida con esa palabra.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "keyword": {
+                "type": "string",
+                "description": "Palabra opcional para filtrar obras por nombre (ej. 'Palmas')",
+            }
+        },
+        "required": [],
+    },
+}
+
+
+CHECK_CONSTRUCTION_DEF = {
+    "name": "check_construction_status",
+    "description": "Consulta el estado actual de una obra por palabras clave en su nombre. Si hay varias coincidencias, devuelve las obras candidatas para que no se asuma una incorrecta.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "keyword": {
+                "type": "string",
+                "description": "Palabra clave o nombre de la obra (ej. 'San Miguel')",
+            }
+        },
+        "required": ["keyword"],
+    },
+}
+
+
+def _get_pool_connection():
     pool = get_pool()
     if pool is None:
+        return None, None
+    conn = pool.getconn()
+    return pool, conn
+
+
+def _search_obras(cur, keyword: str | None = None, limit: int = 10) -> list[dict]:
+    if keyword:
+        normalized = keyword.strip()
+        cur.execute(
+            """
+            SELECT id, nombre, estado, foto_referencia_url
+            FROM obras
+            WHERE estado = 'activa' AND nombre ILIKE %s
+            ORDER BY
+                CASE
+                    WHEN LOWER(nombre) = LOWER(%s) THEN 0
+                    WHEN nombre ILIKE %s THEN 1
+                    ELSE 2
+                END,
+                nombre ASC
+            LIMIT %s
+            """,
+            (f"%{normalized}%", normalized, f"{normalized}%", limit),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id, nombre, estado, foto_referencia_url
+            FROM obras
+            WHERE estado = 'activa'
+            ORDER BY nombre ASC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+
+    return [dict(row) for row in cur.fetchall()]
+
+
+def check_technician_handler(args: dict) -> dict:
+    """Verifica si un usuario de Telegram es tecnico autorizado."""
+    pool, conn = _get_pool_connection()
+    if pool is None or conn is None:
         return {"error": "Base de datos externa (PostgreSQL) no conectada."}
 
-    conn = pool.getconn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Buscar al usuario de Telegram y sus datos de técnico (si tiene)
             cur.execute(
                 """
                 SELECT tt.telegram_id, tt.autorizado, tt.nombre, tt.telefono,
@@ -75,49 +141,49 @@ def check_technician_handler(args: dict) -> dict:
         pool.putconn(conn)
 
 
-# ── check_construction_status ─────────────────────────────────────────────────
-# Definición JSON-schema para consultar el estado de una obra
+def list_constructions_handler(args: dict) -> dict:
+    """Lista obras activas, opcionalmente filtradas por palabra clave."""
+    pool, conn = _get_pool_connection()
+    if pool is None or conn is None:
+        return {"error": "Base de datos externa (PostgreSQL) no conectada."}
 
-CHECK_CONSTRUCTION_DEF = {
-    "name": "check_construction_status",
-    "description": "Consulta el estado actual de una obra por palabras clave en su nombre. Devuelve la lista de pendientes abiertos y reportes recientes.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "keyword": {
-                "type": "string",
-                "description": "Palabra clave o nombre de la obra (ej. 'San Miguel')",
+    keyword = str(args.get("keyword") or "").strip() or None
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            obras = _search_obras(cur, keyword, 20)
+            return {
+                "keyword": keyword,
+                "total": len(obras),
+                "obras": obras,
             }
-        },
-        "required": ["keyword"],
-    },
-}
+    except Exception as e:
+        return {"error": f"Database error: {e}"}
+    finally:
+        pool.putconn(conn)
 
 
 def check_construction_handler(args: dict) -> dict:
-    """
-    Consulta el estado de una obra: pendientes abiertos y últimos reportes.
-    Busca la obra por nombre parcial (ILIKE) con la palabra clave proporcionada.
-    """
-    pool = get_pool()
-    if pool is None:
+    """Consulta estado de una obra sin asumir una sola si hay ambiguedad."""
+    pool, conn = _get_pool_connection()
+    if pool is None or conn is None:
         return {"error": "Base de datos externa (PostgreSQL) no conectada."}
 
-    conn = pool.getconn()
+    keyword = str(args["keyword"]).strip()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Buscar la obra por nombre parcial
-            cur.execute(
-                "SELECT id, nombre, estado FROM obras WHERE nombre ILIKE %s LIMIT 1",
-                (f"%{args['keyword']}%",),
-            )
-            obra_row = cur.fetchone()
-            if not obra_row:
-                return {"error": "Obra no encontrada coincidente con: " + args["keyword"]}
+            matches = _search_obras(cur, keyword, 5)
+            if not matches:
+                return {"error": "Obra no encontrada coincidente con: " + keyword}
 
-            obra_info = dict(obra_row)
+            if len(matches) > 1:
+                return {
+                    "requires_selection": True,
+                    "message": "Hay varias obras que coinciden con esa busqueda.",
+                    "obras": matches,
+                }
 
-            # Obtener los pendientes abiertos de la obra
+            obra_info = matches[0]
+
             cur.execute(
                 """
                 SELECT descripcion, creado_en
@@ -129,7 +195,6 @@ def check_construction_handler(args: dict) -> dict:
             )
             pendientes = [dict(r) for r in cur.fetchall()]
 
-            # Obtener los últimos 5 reportes de la obra
             cur.execute(
                 """
                 SELECT t.nombre, r.mensaje_original, r.fecha

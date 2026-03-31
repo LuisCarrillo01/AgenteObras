@@ -13,6 +13,7 @@ import { getApiErrorMessage } from '../../shared/api/errors';
 const obraSchema = z
   .object({
     nombre: z.string().trim().min(2, 'Minimo 2 caracteres'),
+    foto_referencia_url: z.string().trim().url('Ingresa una URL valida').optional().or(z.literal('')),
     direccion: z.string().optional(),
     cliente: z.string().optional(),
     estado: z.enum(['activa', 'pausada', 'finalizada']),
@@ -37,6 +38,7 @@ type ObraFormValues = z.infer<typeof obraSchema>;
 
 const defaultValues: ObraFormValues = {
   nombre: '',
+  foto_referencia_url: '',
   direccion: '',
   cliente: '',
   estado: 'activa',
@@ -95,6 +97,7 @@ export function ObrasPage() {
     setServerError('');
     reset({
       nombre: item.nombre,
+      foto_referencia_url: item.fotoReferenciaUrl ?? '',
       direccion: item.direccion ?? '',
       cliente: item.cliente ?? '',
       estado: item.estado,
@@ -131,6 +134,7 @@ export function ObrasPage() {
 
     const payload: ObraPayload = {
       nombre: values.nombre,
+      foto_referencia_url: values.foto_referencia_url?.trim() || null,
       direccion: values.direccion?.trim() || null,
       cliente: values.cliente?.trim() || null,
       estado: values.estado as EstadoObra,
@@ -254,6 +258,7 @@ export function ObrasPage() {
       >
         <form id="obra-form" onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
           <Input label="Nombre" error={errors.nombre?.message} {...register('nombre')} />
+          <Input label="URL imagen referencia" error={errors.foto_referencia_url?.message} {...register('foto_referencia_url')} />
           <Input label="Direccion" error={errors.direccion?.message} {...register('direccion')} />
           <Input label="Cliente" error={errors.cliente?.message} {...register('cliente')} />
           <Select label="Estado" error={errors.estado?.message} {...register('estado')}>

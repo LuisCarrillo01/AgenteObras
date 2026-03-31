@@ -44,6 +44,7 @@ CREATE TABLE tecnicos (
 CREATE TABLE obras (
     id           SERIAL PRIMARY KEY,
     nombre       VARCHAR(150)  NOT NULL,
+    foto_referencia_url TEXT,
     direccion    TEXT,
     cliente      VARCHAR(150),
     estado       VARCHAR(50)   NOT NULL DEFAULT 'activa',
