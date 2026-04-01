@@ -34,7 +34,9 @@ model Tecnico {
 model Obra {
   id          Int         @id @default(autoincrement())
   nombre      String      @db.VarChar(150)
-  fotoReferenciaUrl String? @map("foto_referencia_url") @db.Text
+  fotoReferenciaKey String? @map("foto_referencia_key") @db.Text
+  fotoReferenciaMimeType String? @map("foto_referencia_mime_type") @db.VarChar(120)
+  fotoReferenciaNombre String? @map("foto_referencia_nombre") @db.VarChar(255)
   direccion   String?     @db.Text
   cliente     String?     @db.VarChar(150)
   estado      String      @default("activa") @db.VarChar(50)

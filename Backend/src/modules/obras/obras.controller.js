@@ -64,11 +64,31 @@ async function getResumenObra(req, res) {
   });
 }
 
+async function uploadObraImage(req, res) {
+  const data = await obrasService.uploadObraImage(Number(req.params.id), req.file);
+
+  return res.json({
+    success: true,
+    message: 'Imagen de referencia actualizada correctamente',
+    data,
+  });
+}
+
+async function getObraImage(req, res) {
+  const image = await obrasService.getObraImage(Number(req.params.id));
+
+  res.setHeader('Content-Type', image.mimeType);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(image.fileName)}"`);
+  return res.send(image.buffer);
+}
+
 module.exports = {
   listObras,
   listObrasActivas,
   createObra,
   updateObra,
   finalizarObra,
-  getResumenObra
+  getResumenObra,
+  uploadObraImage,
+  getObraImage,
 };

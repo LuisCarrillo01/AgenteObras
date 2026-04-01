@@ -1,5 +1,9 @@
 const { prisma } = require('../../lib/prisma');
-const { notFound } = require('../../lib/http-errors');
+const crypto = require('crypto');
+const path = require('path');
+const { minioClient } = require('../../lib/minio');
+const { badRequest, notFound } = require('../../lib/http-errors');
+const { env } = require('../../config/env');
 const { getPagination } = require('../../utils/pagination');
 
 function normalizeDate(value) {
@@ -9,13 +13,37 @@ function normalizeDate(value) {
 function mapObraPayload(payload) {
   return {
     nombre: payload.nombre,
-    fotoReferenciaUrl: payload.foto_referencia_url ?? null,
     direccion: payload.direccion ?? null,
     cliente: payload.cliente ?? null,
     estado: payload.estado,
     fechaInicio: payload.fecha_inicio ? normalizeDate(payload.fecha_inicio) : undefined,
     fechaFin: payload.fecha_fin ? normalizeDate(payload.fecha_fin) : undefined
   };
+}
+
+function sanitizeFilename(filename) {
+  return filename
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9.-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'imagen';
+}
+
+function buildObjectKey(obraId, originalname) {
+  const ext = path.extname(originalname || '').toLowerCase() || '.bin';
+  const safeName = sanitizeFilename(path.basename(originalname || 'imagen', ext));
+  const uniquePart = crypto.randomUUID();
+  const prefix = env.MINIO_OBJECT_PREFIX.replace(/^\/+|\/+$/g, '');
+  return `${prefix}/obra-${obraId}/${uniquePart}-${safeName}${ext}`;
+}
+
+function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
 }
 
 async function listObras(query) {
@@ -121,11 +149,77 @@ async function getResumenObra(id) {
   };
 }
 
+async function uploadObraImage(id, file) {
+  const obra = await prisma.obra.findUnique({ where: { id } });
+
+  if (!obra) {
+    throw notFound('Obra no encontrada');
+  }
+
+  if (!file) {
+    throw badRequest('Debes enviar una imagen de referencia');
+  }
+
+  if (!env.MINIO_ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    throw badRequest('El archivo debe ser una imagen valida');
+  }
+
+  const objectKey = buildObjectKey(id, file.originalname);
+  await minioClient.putObject(env.MINIO_BUCKET_OBRAS, objectKey, file.buffer, file.size, {
+    'Content-Type': file.mimetype,
+  });
+
+  if (obra.fotoReferenciaKey) {
+    await minioClient.removeObject(env.MINIO_BUCKET_OBRAS, obra.fotoReferenciaKey).catch(() => {});
+  }
+
+  return prisma.obra.update({
+    where: { id },
+    data: {
+      fotoReferenciaKey: objectKey,
+      fotoReferenciaMimeType: file.mimetype,
+      fotoReferenciaNombre: file.originalname,
+    },
+  });
+}
+
+async function getObraImage(id) {
+  const obra = await prisma.obra.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      nombre: true,
+      fotoReferenciaKey: true,
+      fotoReferenciaMimeType: true,
+      fotoReferenciaNombre: true,
+    },
+  });
+
+  if (!obra) {
+    throw notFound('Obra no encontrada');
+  }
+
+  if (!obra.fotoReferenciaKey) {
+    throw notFound('La obra no tiene imagen de referencia');
+  }
+
+  const stream = await minioClient.getObject(env.MINIO_BUCKET_OBRAS, obra.fotoReferenciaKey);
+  const buffer = await streamToBuffer(stream);
+
+  return {
+    buffer,
+    mimeType: obra.fotoReferenciaMimeType || 'application/octet-stream',
+    fileName: obra.fotoReferenciaNombre || `${obra.nombre}.bin`,
+  };
+}
+
 module.exports = {
   listObras,
   listObrasActivas,
   createObra,
   updateObra,
   finalizarObra,
-  getResumenObra
+  getResumenObra,
+  uploadObraImage,
+  getObraImage,
 };
