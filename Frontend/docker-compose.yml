@@ -1,0 +1,16 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opengravity_frontend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - Agente_obras
+
+networks:
+  Agente_obras:
+    external: true
+    name: Agente_obras
