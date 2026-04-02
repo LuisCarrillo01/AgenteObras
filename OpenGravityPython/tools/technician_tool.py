@@ -71,7 +71,7 @@ def _search_obras(cur, keyword: str | None = None, limit: int = 10) -> list[dict
         normalized = keyword.strip()
         cur.execute(
             """
-            SELECT id, nombre, estado, foto_referencia_url
+            SELECT id, nombre, estado, foto_referencia_key, foto_referencia_mime_type, foto_referencia_nombre
             FROM obras
             WHERE estado = 'activa' AND nombre ILIKE %s
             ORDER BY
@@ -88,7 +88,7 @@ def _search_obras(cur, keyword: str | None = None, limit: int = 10) -> list[dict
     else:
         cur.execute(
             """
-            SELECT id, nombre, estado, foto_referencia_url
+            SELECT id, nombre, estado, foto_referencia_key, foto_referencia_mime_type, foto_referencia_nombre
             FROM obras
             WHERE estado = 'activa'
             ORDER BY nombre ASC

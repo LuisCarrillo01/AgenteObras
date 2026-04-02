@@ -18,6 +18,7 @@ from telegram import (
     ReplyKeyboardRemove,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InputFile,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -40,6 +41,7 @@ from tools.report_tool import (
     mark_report_draft_for_edit,
     save_confirmed_report,
 )
+from storage.minio_client import get_object_bytes
 
 
 REPORT_CONFIRM_CALLBACK = "report_confirm"
@@ -115,12 +117,25 @@ async def _send_work_selection_prompt(update: Update, draft: dict) -> None:
     for obra in draft.get("obra_candidates") or []:
         caption = obra.get("nombre") or "Obra sin nombre"
         reply_markup = _build_work_select_action(int(obra["id"]))
-        photo_url = obra.get("foto_referencia_url")
+        photo_key = obra.get("foto_referencia_key")
+        photo_name = obra.get("foto_referencia_nombre") or f"obra-{obra.get('id', 'sin-id')}.jpg"
 
-        if photo_url:
-            await message.reply_photo(photo=photo_url, caption=caption, reply_markup=reply_markup)
-        else:
-            await message.reply_text(caption, reply_markup=reply_markup)
+        if photo_key:
+            try:
+                photo_bytes = get_object_bytes(photo_key)
+                photo_bytes.name = photo_name
+                await message.reply_photo(
+                    photo=InputFile(photo_bytes, filename=photo_name),
+                    caption=caption,
+                    reply_markup=reply_markup,
+                )
+                continue
+            except Exception as error:
+                print(
+                    f"[Bot] Error sending work image for obra={obra.get('id')} key={photo_key}: {error}"
+                )
+
+        await message.reply_text(caption, reply_markup=reply_markup)
 
 
 def _extract_report_preview(agent_result: dict) -> str | None:

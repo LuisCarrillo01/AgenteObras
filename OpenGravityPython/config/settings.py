@@ -36,12 +36,18 @@ GROQ_API_KEY: str = _require_env("GROQ_API_KEY")
 
 # ── Configuración de OpenRouter (proveedor de respaldo) ──────────────────────
 OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+OPENROUTER_MODEL: str = _require_env("OPENROUTER_MODEL") if OPENROUTER_API_KEY else ""
 
 # ── Ruta al archivo JSON de credenciales de Firebase ─────────────────────────
-GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS", "./service-account.json"
-)
+GOOGLE_APPLICATION_CREDENTIALS: str = _require_env("GOOGLE_APPLICATION_CREDENTIALS")
 
 # ── URL de conexión a PostgreSQL (para reportes técnicos) ────────────────────
-POSTGRES_URL: str = os.getenv("POSTGRES_URL", "")
+POSTGRES_URL: str = _require_env("POSTGRES_URL")
+
+# ── Configuración de MinIO (imagenes privadas de obras) ─────────────────────
+MINIO_ENDPOINT: str = _require_env("MINIO_ENDPOINT")
+MINIO_PORT: int = int(_require_env("MINIO_PORT"))
+MINIO_USE_SSL: bool = _require_env("MINIO_USE_SSL").lower() == "true"
+MINIO_ACCESS_KEY: str = _require_env("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY: str = _require_env("MINIO_SECRET_KEY")
+MINIO_BUCKET_OBRAS: str = _require_env("MINIO_BUCKET_OBRAS")

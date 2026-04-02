@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Card, ConfirmDialog, EmptyState, ErrorState, Input, Modal, PageHeader, Select, StatusBadge } from '../../shared/ui/ui';
-import { createObra, finalizarObra, getObras, updateObra } from './api';
+import { createObra, finalizarObra, getObras, updateObra, uploadObraImage } from './api';
 import type { EstadoObra, Obra, ObraPayload } from './types';
 import { formatDate, mapEstadoTone } from '../../shared/lib/formatters';
 import { getApiErrorMessage } from '../../shared/api/errors';
@@ -13,7 +13,6 @@ import { getApiErrorMessage } from '../../shared/api/errors';
 const obraSchema = z
   .object({
     nombre: z.string().trim().min(2, 'Minimo 2 caracteres'),
-    foto_referencia_url: z.string().trim().url('Ingresa una URL valida').optional().or(z.literal('')),
     direccion: z.string().optional(),
     cliente: z.string().optional(),
     estado: z.enum(['activa', 'pausada', 'finalizada']),
@@ -38,7 +37,6 @@ type ObraFormValues = z.infer<typeof obraSchema>;
 
 const defaultValues: ObraFormValues = {
   nombre: '',
-  foto_referencia_url: '',
   direccion: '',
   cliente: '',
   estado: 'activa',
@@ -55,6 +53,7 @@ export function ObrasPage() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [finalizeDialogOpen, setFinalizeDialogOpen] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const obrasQuery = useQuery({ queryKey: ['obras', estadoFilter], queryFn: () => getObras(estadoFilter || undefined) });
 
@@ -73,6 +72,7 @@ export function ObrasPage() {
     setCloseDialogOpen(false);
     setSelectedObra(null);
     setServerError('');
+    setSelectedImageFile(null);
     reset(defaultValues);
   };
 
@@ -88,6 +88,7 @@ export function ObrasPage() {
   const openCreateModal = () => {
     setSelectedObra(null);
     setServerError('');
+    setSelectedImageFile(null);
     reset(defaultValues);
     setModalOpen(true);
   };
@@ -95,9 +96,9 @@ export function ObrasPage() {
   const openEditModal = (item: Obra) => {
     setSelectedObra(item);
     setServerError('');
+    setSelectedImageFile(null);
     reset({
       nombre: item.nombre,
-      foto_referencia_url: item.fotoReferenciaUrl ?? '',
       direccion: item.direccion ?? '',
       cliente: item.cliente ?? '',
       estado: item.estado,
@@ -112,10 +113,9 @@ export function ObrasPage() {
     closeModalImmediately();
   };
 
-  const createMutation = useMutation({ mutationFn: createObra, onSuccess: syncList, onError: (error) => setServerError(getApiErrorMessage(error)) });
+  const createMutation = useMutation({ mutationFn: createObra, onError: (error) => setServerError(getApiErrorMessage(error)) });
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: ObraPayload }) => updateObra(id, payload),
-    onSuccess: syncList,
     onError: (error) => setServerError(getApiErrorMessage(error)),
   });
   const finishMutation = useMutation({
@@ -134,7 +134,6 @@ export function ObrasPage() {
 
     const payload: ObraPayload = {
       nombre: values.nombre,
-      foto_referencia_url: values.foto_referencia_url?.trim() || null,
       direccion: values.direccion?.trim() || null,
       cliente: values.cliente?.trim() || null,
       estado: values.estado as EstadoObra,
@@ -143,11 +142,19 @@ export function ObrasPage() {
     };
 
     if (selectedObra) {
-      await updateMutation.mutateAsync({ id: selectedObra.id, payload });
+      const obra = await updateMutation.mutateAsync({ id: selectedObra.id, payload });
+      if (selectedImageFile) {
+        await uploadObraImage(obra.id, selectedImageFile);
+      }
+      await syncList();
       return;
     }
 
-    await createMutation.mutateAsync(payload);
+    const obra = await createMutation.mutateAsync(payload);
+    if (selectedImageFile) {
+      await uploadObraImage(obra.id, selectedImageFile);
+    }
+    await syncList();
   });
 
   return (
@@ -258,7 +265,21 @@ export function ObrasPage() {
       >
         <form id="obra-form" onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
           <Input label="Nombre" error={errors.nombre?.message} {...register('nombre')} />
-          <Input label="URL imagen referencia" error={errors.foto_referencia_url?.message} {...register('foto_referencia_url')} />
+          <div className="field">
+            <label htmlFor="foto-referencia">Imagen de referencia</label>
+            <input
+              id="foto-referencia"
+              className="input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => setSelectedImageFile(event.target.files?.[0] ?? null)}
+            />
+            <span className="muted">
+              {selectedImageFile?.name
+                ?? selectedObra?.fotoReferenciaNombre
+                ?? 'Sube una imagen para identificar la obra en Telegram.'}
+            </span>
+          </div>
           <Input label="Direccion" error={errors.direccion?.message} {...register('direccion')} />
           <Input label="Cliente" error={errors.cliente?.message} {...register('cliente')} />
           <Select label="Estado" error={errors.estado?.message} {...register('estado')}>

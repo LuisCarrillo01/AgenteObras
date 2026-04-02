@@ -6,6 +6,9 @@ El flujo es obligatorio en dos pasos:
 2. El técnico confirma o modifica el borrador antes de guardar.
 """
 
+import re
+import unicodedata
+
 from db.pool import get_pool
 from db.schema import (
     clear_report_draft_sync,
@@ -14,6 +17,27 @@ from db.schema import (
     update_report_draft_sync,
 )
 from psycopg2.extras import RealDictCursor
+
+
+COMMON_WORK_NAME_TOKENS = {
+    "a",
+    "al",
+    "con",
+    "de",
+    "del",
+    "el",
+    "en",
+    "la",
+    "las",
+    "los",
+    "obra",
+    "para",
+    "por",
+    "proyecto",
+    "un",
+    "una",
+    "y",
+}
 
 
 TOOL_DEFINITION = {
@@ -59,6 +83,75 @@ def _clean_items(items: list[str] | None) -> list[str]:
     return cleaned
 
 
+def _normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    normalized = normalized.lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _tokenize_work_name(value: str) -> list[str]:
+    normalized = _normalize_text(value)
+    return [
+        token
+        for token in normalized.split()
+        if token and token not in COMMON_WORK_NAME_TOKENS
+    ]
+
+
+def _score_work_match(query: str, obra_name: str) -> tuple[int, int]:
+    query_normalized = _normalize_text(query)
+    obra_normalized = _normalize_text(obra_name)
+    if not query_normalized or not obra_normalized:
+        return (0, 0)
+
+    query_tokens = set(_tokenize_work_name(query))
+    obra_tokens = set(_tokenize_work_name(obra_name))
+    shared_tokens = query_tokens & obra_tokens
+
+    score = 0
+    if query_normalized == obra_normalized:
+        score += 200
+    if query_normalized in obra_normalized or obra_normalized in query_normalized:
+        score += 80
+    if obra_normalized.startswith(query_normalized) or query_normalized.startswith(obra_normalized):
+        score += 25
+
+    strong_shared_tokens = {token for token in shared_tokens if len(token) >= 3}
+    if strong_shared_tokens:
+        score += len(strong_shared_tokens) * 35
+        score += max(len(token) for token in strong_shared_tokens)
+
+    if query_tokens:
+        coverage = len(shared_tokens) / len(query_tokens)
+        if coverage >= 1:
+            score += 40
+        elif coverage >= 0.6:
+            score += 20
+
+    return (score, len(strong_shared_tokens))
+
+
+def _is_reasonable_work_match(query: str, obra_name: str) -> bool:
+    query_normalized = _normalize_text(query)
+    obra_normalized = _normalize_text(obra_name)
+    if not query_normalized or not obra_normalized:
+        return False
+
+    if query_normalized == obra_normalized:
+        return True
+
+    query_tokens = set(_tokenize_work_name(query))
+    obra_tokens = set(_tokenize_work_name(obra_name))
+    shared_tokens = query_tokens & obra_tokens
+
+    if shared_tokens:
+        return True
+
+    return query_normalized in obra_normalized or obra_normalized in query_normalized
+
+
 def _resolve_context(args: dict) -> dict:
     pool = get_pool()
     if pool is None:
@@ -98,23 +191,32 @@ def _find_matching_obras(query: str) -> list[dict]:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, nombre, foto_referencia_url
+                SELECT id, nombre, foto_referencia_key, foto_referencia_mime_type, foto_referencia_nombre
                 FROM obras
-                WHERE estado = 'activa' AND nombre ILIKE %s
-                ORDER BY
-                    CASE
-                        WHEN LOWER(nombre) = LOWER(%s) THEN 0
-                        WHEN nombre ILIKE %s THEN 1
-                        ELSE 2
-                    END,
-                    nombre ASC
-                LIMIT 5
+                WHERE estado = 'activa'
                 """,
-                (f"%{query}%", query, f"{query}%"),
             )
-            return [dict(row) for row in cur.fetchall()]
+            obras = [dict(row) for row in cur.fetchall()]
     finally:
         pool.putconn(conn)
+
+    candidates: list[tuple[int, int, dict]] = []
+    for obra in obras:
+        obra_name = str(obra.get("nombre") or "")
+        if not _is_reasonable_work_match(query, obra_name):
+            continue
+        score, strong_shared_tokens = _score_work_match(query, obra_name)
+        candidates.append((score, strong_shared_tokens, obra))
+
+    candidates.sort(
+        key=lambda item: (
+            item[0],
+            item[1],
+            len(_normalize_text(str(item[2].get("nombre") or ""))),
+        ),
+        reverse=True,
+    )
+    return [obra for _, _, obra in candidates[:5]]
 
 
 def _build_confirmation_draft(context: dict, args: dict, obra: dict) -> dict:

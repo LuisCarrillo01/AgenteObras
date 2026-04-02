@@ -3,7 +3,9 @@ export type EstadoObra = 'activa' | 'pausada' | 'finalizada';
 export interface Obra {
   id: number;
   nombre: string;
-  fotoReferenciaUrl: string | null;
+  fotoReferenciaKey: string | null;
+  fotoReferenciaMimeType: string | null;
+  fotoReferenciaNombre: string | null;
   direccion: string | null;
   cliente: string | null;
   estado: EstadoObra;
@@ -14,7 +16,6 @@ export interface Obra {
 
 export interface ObraPayload {
   nombre: string;
-  foto_referencia_url?: string | null;
   direccion?: string | null;
   cliente?: string | null;
   estado?: EstadoObra;

@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, EmptyState, ErrorState, PageHeader, StatusBadge } from '../../shared/ui/ui';
 import { getObraResumen } from './api';
+import { useObraImageUrl } from './useObraImageUrl';
 import { getReportesByObra } from '../reportes/api';
 import { getPendientesByObra } from '../pendientes/api';
 import { formatDate } from '../../shared/lib/formatters';
@@ -14,6 +15,7 @@ export function ObraDetallePage() {
   const resumenQuery = useQuery({ queryKey: ['obra-resumen', obraId], queryFn: () => getObraResumen(obraId), enabled: Number.isFinite(obraId) });
   const reportesQuery = useQuery({ queryKey: ['reportes-obra', obraId], queryFn: () => getReportesByObra(obraId), enabled: Number.isFinite(obraId) });
   const pendientesQuery = useQuery({ queryKey: ['pendientes-obra', obraId], queryFn: () => getPendientesByObra(obraId), enabled: Number.isFinite(obraId) });
+  const obraImage = useObraImageUrl(obraId);
 
   return (
     <section className="page">
@@ -30,19 +32,34 @@ export function ObraDetallePage() {
 
       {resumenQuery.isError ? <ErrorState title="No se pudo cargar el resumen" description="Verifica que el id de obra exista." /> : null}
 
-      <div className="grid-cards">
-        <Card className="stat-card">
-          <span className="stat-label">Obra</span>
-          <div style={{ fontWeight: 700 }}>{resumenQuery.data?.obra ?? '--'}</div>
+      <div className="obra-detail-hero">
+        <Card className="obra-image-card obra-detail-hero-media">
+          <div className="obra-image-frame">
+            {obraImage.imageUrl ? <img src={obraImage.imageUrl} alt={resumenQuery.data?.obra ?? 'Imagen de la obra'} className="obra-image" /> : null}
+            {!obraImage.imageUrl && obraImage.isLoading ? <div className="obra-image-placeholder obra-image-skeleton" /> : null}
+            {!obraImage.imageUrl && !obraImage.isLoading ? (
+              <div className="obra-image-placeholder">
+                <strong>Sin imagen de referencia</strong>
+                <span>Sube una foto desde la pantalla de obras para identificar mejor este frente.</span>
+              </div>
+            ) : null}
+          </div>
         </Card>
-        <Card className="stat-card">
-          <span className="stat-label">Pendientes</span>
-          <div className="stat-value">{resumenQuery.data?.pendientes ?? '--'}</div>
-        </Card>
-        <Card className="stat-card">
-          <span className="stat-label">Ultima actividad</span>
-          <div>{formatDate(resumenQuery.data?.ultima_actividad ?? null)}</div>
-        </Card>
+
+        <div className="obra-detail-stats-grid">
+          <Card className="stat-card">
+            <span className="stat-label">Obra</span>
+            <div style={{ fontWeight: 700 }}>{resumenQuery.data?.obra ?? '--'}</div>
+          </Card>
+          <Card className="stat-card">
+            <span className="stat-label">Pendientes</span>
+            <div className="stat-value">{resumenQuery.data?.pendientes ?? '--'}</div>
+          </Card>
+          <Card className="stat-card">
+            <span className="stat-label">Ultima actividad</span>
+            <div>{formatDate(resumenQuery.data?.ultima_actividad ?? null)}</div>
+          </Card>
+        </div>
       </div>
 
       <div className="data-grid">

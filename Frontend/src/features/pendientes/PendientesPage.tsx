@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, EmptyState, ErrorState, Input, PageHeader, Select, StatusBadge } from '../../shared/ui/ui';
+import { ObraArt } from '../obras/ObraArt';
 import { getPendientes } from './api';
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue';
 
@@ -106,13 +107,13 @@ export function PendientesPage() {
         <div className="works-grid">
           {obras.map((obra, index) => (
             <article key={obra.obraId} className="work-card">
-              <div className={`work-card-art work-card-art-${artworkThemes[index % artworkThemes.length]}`}>
-                <div className="work-card-overlay">
-                  <span className="work-card-chip">Obra #{obra.obraId}</span>
-                  <h2 className="work-card-title">{obra.obraNombre}</h2>
-                  <p className="work-card-copy">{obra.obraCliente}</p>
-                </div>
-              </div>
+              <ObraArt
+                obraId={obra.obraId}
+                obraNombre={obra.obraNombre}
+                obraCliente={obra.obraCliente}
+                chipLabel={`Obra #${obra.obraId}`}
+                themeClassName={`work-card-art work-card-art-${artworkThemes[index % artworkThemes.length]}`}
+              />
 
               <div className="work-card-body">
                 <div className="work-card-meta-row">

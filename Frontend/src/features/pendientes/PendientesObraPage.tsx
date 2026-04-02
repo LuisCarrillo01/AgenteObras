@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Card, EmptyState, ErrorState, PageHeader, StatusBadge } from '../../shared/ui/ui';
 import { getPendientesByObra, reabrirPendiente, resolverPendiente } from './api';
+import { useObraImageUrl } from '../obras/useObraImageUrl';
 import { formatDate } from '../../shared/lib/formatters';
 import { getApiErrorMessage } from '../../shared/api/errors';
 import { useState } from 'react';
@@ -21,6 +22,7 @@ export function PendientesObraPage() {
     queryFn: () => getPendientesByObra(obraId),
     enabled: Number.isFinite(obraId),
   });
+  const obraImage = useObraImageUrl(obraId);
 
   const resolverMutation = useMutation({
     mutationFn: resolverPendiente,
@@ -90,18 +92,24 @@ export function PendientesObraPage() {
       />
 
       <Card className="pending-hero-card">
-        <div className={`pending-hero-art work-card-art-${theme}`}>
+        <div className={`pending-hero-art work-card-art-${theme}${obraImage.imageUrl ? ' pending-hero-art-image' : ''}`}>
+          {obraImage.imageUrl ? <img src={obraImage.imageUrl} alt={grouped.obraNombre} className="obra-image obra-image-hero" /> : null}
+          {!obraImage.imageUrl && obraImage.isLoading ? <div className="obra-image-placeholder obra-image-skeleton" /> : null}
           <div className="work-card-overlay pending-hero-overlay">
             <span className="work-card-chip">Tablero por obra</span>
             <h2 className="work-card-title">{grouped.obraNombre}</h2>
             <p className="work-card-copy">{grouped.obraCliente}</p>
-            <div className="pending-hero-caption">Gestiona pendientes abiertos y recupera historial resuelto sin salir de esta obra.</div>
+            <div className="pending-hero-caption">
+              {obraImage.imageUrl
+                ? 'Gestiona pendientes abiertos y resueltos con referencia visual directa de la obra.'
+                : 'Gestiona pendientes abiertos y recupera historial resuelto sin salir de esta obra.'}
+            </div>
           </div>
         </div>
         <div className="pending-hero-meta">
           <div className="pending-hero-topline">
             <StatusBadge label={grouped.obraEstado} tone="neutral" />
-            <span className="pending-hero-hint">Sincronizado con el registro central</span>
+            <span className="pending-hero-hint">{obraImage.imageUrl ? 'Imagen de referencia disponible' : 'Sin imagen de referencia'}</span>
           </div>
           <div className="work-card-stats">
             <div className="work-stat work-stat-open">
